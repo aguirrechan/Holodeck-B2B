@@ -24,6 +24,8 @@ import java.util.Iterator;
 import java.util.Map;
 import java.util.Optional;
 
+import org.apache.logging.log4j.Logger;
+
 import org.holodeckb2b.common.util.CompareUtils;
 import org.holodeckb2b.commons.util.Utils;
 import org.holodeckb2b.core.pmode.PModeUtils;
@@ -124,10 +126,18 @@ public class PModeFinder {
      * @return          The P-Mode for the message unit if the message unit can be matched to a <b>single</b> P-Mode,
      *                  <code>null</code> if no P-Mode could be found for the user message message unit.
      */
-    public static IPMode forReceivedUserMessage(final IUserMessage mu) {
+    public static IPMode forReceivedUserMessage(final IUserMessage mu, final Logger log) {
+			  System.out.println("Find p mode for received user message.");
         final IPModeSet pmodes = HolodeckB2BCoreInterface.getPModeSet();
-        if (pmodes == null)
+
+				if (pmodes == null){
+            System.out.println("No p modes found return null");
+            log.error("No p modes found return null");
             return null;
+        } else {
+					  System.out.println("pmode set pmodes is not null.");
+					  log.info("pmode set pmodes is not null.");
+				}
 
         IPMode    hPMode = null;
         int       hValue = 0;
@@ -135,10 +145,18 @@ public class PModeFinder {
         
         
         for (final IPMode p : pmodes.getAll()) {
+          System.out.println("Check for p mode: " + p.getId());
+          log.info("Check for p mode: ", p.getId());
         	// If the P-Mode MEP binding does not start with the ebMS3 namespace URI it does not apply to ebMS3/AS4 and
         	// therefore should be ignored
-        	if (!p.getMepBinding().startsWith(EbMSConstants.EBMS3_NS_URI))
+        	if (!p.getMepBinding().startsWith(EbMSConstants.EBMS3_NS_URI)){
+            System.out.println("Next p mode because MEP binding does not start with EBMS3_NS_URI it was: " + p.getMepBinding());
+            log.info("Next p mode because MEP binding does not start with EBMS3_NS_URI it was:", p.getMepBinding());
         		continue;
+					} else {
+						System.out.println("mep binding starts with EBMS3_NS_URI.");
+						log.info("mep binding starts with EBMS3_NS_URI.");
+					}
         	
         	/*
         	 * First step is to determine if the P-Mode should be evaluated, i.e. if it governs message receiving. For
@@ -146,53 +164,128 @@ public class PModeFinder {
         	 * a Push or responding to a Pull.  
         	 */
         	final boolean initiator = PModeUtils.isHolodeckB2BInitiator(p);
+          System.out.println("p mode initiator : " + initiator);
+          log.info("p mode initiator : ", initiator);
         	final String  mepBinding = p.getMepBinding();
+          System.out.println("p mode mep binding : " + mepBinding);
+          log.info("p mode mep binding : ", mepBinding);
+
         	if ((initiator && mepBinding.equals(EbMSConstants.ONE_WAY_PUSH)) // sending using Push
     		|| (!initiator && mepBinding.equals(EbMSConstants.ONE_WAY_PULL))) // sending using Pull
+					{
+						System.out.println("Next p mode because sending using Push or sending using pull");
+						log.info("Next p mode because sending using Push or sending using pull");
                 continue;            
+					} else {
+						System.out.println("Check further initiator and mep binding match for rec user message.");
+						log.info("Check further initiator and mep binding match for rec user message.");
+					}
 
         	/*
         	 * Now first check the generic meta-data elements like P-Mode identifier, agreement reference and trading
         	 * partners.
         	 */        	
             int cValue = 0;
+						System.out.println("cValue : " + cValue);
+						log.info("cValue : ", cValue);
             // P-Mode id and agreement info are contained in optional element
             final IAgreementReference agreementRef = mu.getCollaborationInfo().getAgreement();
 
+						System.out.println("Check include id");
+						log.info("Check include id");
             if (p.includeId() != null && p.includeId()) {
                 // The P-Mode id can be used for matching, so check if one is given in message
+                System.out.println("p mode uses incldeId");
+                log.info("p mode uses incldeId");
                 if (agreementRef != null) {
                     final String pid = agreementRef.getPModeId();
-                    if (!Utils.isNullOrEmpty(pid) && pid.equals(p.getId()))
+                    System.out.println("agreement - p mode id : "+ pid);
+                    log.info("agreement - p mode id : ", pid);
+                    if (!Utils.isNullOrEmpty(pid) && pid.equals(p.getId())){
+											  System.out.println("Augment cValue : " + cValue + " because p mode id matches.");
+											  log.info("Augment cValue : " + cValue + " because p mode id matches.");
                         cValue = MATCH_WEIGHTS.get(PARAMETERS.ID);
-                }
-            }
+												System.out.println("cValue : " + cValue);
+												log.info("cValue : ", cValue);
+										} else {
+											  System.out.println("pid is null or pid does not equal p.getId()");
+											  log.info("pid is null or pid does not equal p.getId()");
+										}
+                } else {
+									System.out.println("agreementRef was null");
+									log.info("agreementRef was null");
+								}
+            } else {
+							System.out.println("includeId was null or includeId evaluates to false.");
+							log.info("includeId was null or includeId evaluates to false.");
+						}
 
             // Check agreement info
+						System.out.println("Check agreement info");
+						log.info("Check agreement info");
             final IAgreement agreementPMode = p.getAgreement();
             if (agreementPMode != null) {
+							  System.out.println("agreementPMode is not null");
+							  log.info("agreementPMode is not null");
+
+								if ( agreementRef == null ) {
+									System.out.println("agreementRef is null.");
+									log.info("agreementRef is null.");
+								} else {
+									System.out.println("agreementRef name : " + agreementRef.getName());
+									log.info("agreementRef name : ", agreementRef.getName());
+								}
+
+								System.out.println("agreementPmode name : " + agreementPMode.getName());
+								log.info("agreementPmode name : ", agreementPMode.getName());
+
                 final int i = Utils.compareStrings(agreementRef != null ? agreementRef.getName() : null
                                                   , agreementPMode.getName());
+								System.out.println("switch_i : " + i);
+								log.info("switch_i : ", i);
                 switch (i) {
                     case -2 :
                     case 2 :
+											  System.out.println("Next p mode - mismatch on agreement name...");
+											  log.info("Next p mode - mismatch on agreement name...");
                         // mismatch on agreement name, either because different or one defined in P-Mode but not in msg
                         continue;
                     case 0 :
                         // names equal, but for match also types must be equal
                         final int j = Utils.compareStrings(agreementRef.getType(), agreementPMode.getType());
-                        if (j == -1 || j == 0)
+											  System.out.println("agreementRef type : " + agreementRef.getType());
+											  log.info("agreementRef type : " + agreementRef.getType());
+											  System.out.println("agreementPMode type : " + agreementPMode.getType());
+											  log.info("agreementPMode type : ", agreementPMode.getType());
+
+												System.out.println("switch_j : " + j);
+												log.info("switch_j : " + j);
+
+                        if (j == -1 || j == 0){
+												  	System.out.println("Augment cValue : " + cValue + " because agreement info matches.");
+												  	log.info("Augment cValue : " + cValue + " because agreement info matches.");
                             cValue += MATCH_WEIGHTS.get(PARAMETERS.AGREEMENT);
-                        else
+												    System.out.println("cValue : " + cValue);
+												    log.info("cValue : ", cValue);
+												}
+                        else {
+													  System.out.println("Next p mode because of mis-match on agreement type.");
+													  log.info("Next p mode because of mis-match on agreement type.");
                             continue; // mis-match on agreement type
+												}
                     case -1 :
                         // both P-Mode and message agreement ref are empty, ignore
                     case 1 :
                         // the message contains agreement ref, but P-Mode does not, ignore
                 }
-            }
+            } else {
+							System.out.println("agreement p mode is null.");
+							log.info("agreement p mode is null.");
+						}
 
             // Check trading partner info
+						System.out.println("Check trading partner info");
+						log.info("Check trading partner info");
             final ITradingPartner from = mu.getSender(), to = mu.getReceiver();
             ITradingPartner fromPMode = null, toPMode = null;
             /*
@@ -208,34 +301,95 @@ public class PModeFinder {
             } 
 
             // Check To info
+						System.out.println("Check to to info");
+						log.info("Check to to info");
             if (toPMode != null) {
+							  System.out.println("to get role : " + to.getRole());
+							  log.info("to get role : ", to.getRole());
+							  System.out.println("to p mode get role : " + toPMode.getRole());
+							  log.info("to p mode get role : ", toPMode.getRole());
                 final int c = Utils.compareStrings(to.getRole(), toPMode.getRole());
-                if ( c == -1 || c == 0)
+								System.out.println("compare c : " + c);
+								log.info("compare c : ", c);
+                if ( c == -1 || c == 0){
+									  System.out.println("Augment cValue : " + cValue + " because to info matches.");
+									  log.info("Augment cValue : " + cValue + " because to info id matches.");
                     cValue += MATCH_WEIGHTS.get(PARAMETERS.TO_ROLE);
-                else if (c != 1)
+										System.out.println("cValue : " + cValue);
+										log.info("cValue : ", cValue);
+								}
+                else if (c != 1) {
+									  System.out.println("Next p mode - mis-match on To party role");
+									  log.info("Next p mode - mis-match on To party role");
                     continue; // mis-match on To party role
+								}
                 Collection<IPartyId> pmodeToIds = toPMode.getPartyIds();
-                if (!Utils.isNullOrEmpty(pmodeToIds))
-                    if (CompareUtils.areEqual(to.getPartyIds(), pmodeToIds))
+                if (!Utils.isNullOrEmpty(pmodeToIds)) {
+                    if (CompareUtils.areEqual(to.getPartyIds(), pmodeToIds)){
+									      System.out.println("Augment cValue : " + cValue + " because to ids match.");
+									      log.info("Augment cValue : " + cValue + " because to ids match.");
                         cValue += MATCH_WEIGHTS.get(PARAMETERS.TO);
-                    else
+										    System.out.println("cValue : " + cValue);
+										    log.info("cValue : ", cValue);
+										}
+                    else {
+											  System.out.println("Next p mode - mis-match on To party id s");
+											  log.info("Next p mode - mis-match on To party id s");
                         continue; // mis-match on To party id('s)
-            }
+										}
+								} else {
+									System.out.println("pmodeToIds is null or empty");
+									log.info("pmodeToIds is null or empty");
+								}
+            } else {
+							System.out.println("to p mode was null");
+							log.info("to p mode was null");
+						}
 
             // Check From info
+						System.out.println("Check from info");
+						log.info("Check from info");
             if (fromPMode != null) {
+							  System.out.println("from get role : " + from.getRole());
+							  log.info("from get role : ", from.getRole());
+							  System.out.println("from p mode get role : " + fromPMode.getRole());
+							  log.info("from p mode get role : ", fromPMode.getRole());
                 final int c = Utils.compareStrings(from.getRole(), fromPMode.getRole());
-                if ( c == -1 || c == 0)
+								System.out.println("compare c : " + c);
+								log.info("compare c : ", c);
+                if ( c == -1 || c == 0){
+									  System.out.println("Augment cValue : " + cValue + " because to info matches.");
+									  log.info("Augment cValue : " + cValue + " because to info id matches.");
                     cValue += MATCH_WEIGHTS.get(PARAMETERS.FROM_ROLE);
-                else if (c != 1)
+										System.out.println("cValue : " + cValue);
+										log.info("cValue : ", cValue);
+								}
+                else if (c != 1) {
+									  System.out.println("Next p mode - mis-match on From party role");
+									  log.info("Next p mode - mis-match on From party role");
                     continue; // mis-match on From party role
+								}
                 Collection<IPartyId> pmodeFromIds = fromPMode.getPartyIds();
-                if (!Utils.isNullOrEmpty(pmodeFromIds))
-                    if (CompareUtils.areEqual(from.getPartyIds(), pmodeFromIds))
+                if (!Utils.isNullOrEmpty(pmodeFromIds)) {
+                    if (CompareUtils.areEqual(from.getPartyIds(), pmodeFromIds)){
+									      System.out.println("Augment cValue : " + cValue + " because from ids match.");
+									      log.info("Augment cValue : " + cValue + " because from ids match.");
                         cValue += MATCH_WEIGHTS.get(PARAMETERS.FROM);
-                    else
+										    System.out.println("cValue : " + cValue);
+										    log.info("cValue : ", cValue);
+										} else {
+											  System.out.println("Next p mode - mis-match on From party id s");
+											  log.info("Next p mode - mis-match on From party id s");
                         continue;  // mis-match on From party id('s)
-            }
+										}
+								} else {
+									System.out.println("pmodeFromIds is null or empty");
+									log.info("pmodeFromIds is null or empty");
+								}
+            } else {
+						  	System.out.println("from p mode was null");
+						  	log.info("from p mode was null");
+						}
 
             /*
              * Remaining meta-data to be matched are defined per Leg basis. All relevant information is contained in the 
@@ -246,25 +400,74 @@ public class PModeFinder {
             final IBusinessInfo     pmBI = flow != null ? flow.getBusinessInfo() : null;
             if (pmBI != null) {
                 // Check Service
+								System.out.println("Check service");
+								log.info("Check service");
                 final IService svcPMode = pmBI.getService();
                 if (svcPMode != null) {
                     final IService svc = mu.getCollaborationInfo().getService();
+										System.out.println("svc name : " + svc.getName());
+										log.info("svc name : " + svc.getName());
+										System.out.println("svc p mode name : " + svcPMode.getName());
+										log.info("svc p mode name : " + svcPMode.getName());
                     if (svc.getName().equals(svcPMode.getName())) {
+											  
+											  System.out.println("svc get type : " + svc.getType());
+											  log.info("svc get type : " + svc.getType());
+												System.out.println("svc p mode get type : " + svcPMode.getType());
+												log.info("svc p mode get type : " + svcPMode.getType());
                         final int i = Utils.compareStrings(svc.getType(), svcPMode.getType());
-                        if (i == -1 || i == 0)
+
+												System.out.println("switch_i : " + i);
+												log.info("switch_i : " + i);
+                        if (i == -1 || i == 0) {
+									          System.out.println("Augment cValue : " + cValue + " because service matches.");
+									          log.info("Augment cValue : " + cValue + " because from service matches.");
                             cValue += MATCH_WEIGHTS.get(PARAMETERS.SERVICE);
-                        else
+										        System.out.println("cValue : " + cValue);
+										        log.info("cValue : ", cValue);
+												}
+                        else {
+													  System.out.println("Next p mode - mis-match on service type");
+													  log.info("Next p mode - mis-match on service type");
                             continue; // mis-match on service type
-                    } else
+												}
+                    } else {
+											  System.out.println("Next p mode - mis-match on service name");
+											  log.info("Next p mode - mis-match on service name");
                         continue; // mis-match on service name
-                }
+										}
+                } else {
+									System.out.println("svcPMode was null");
+									log.info("svcPMode was null");
+								}
                 // Check Action
+								System.out.println("Check action");
+								log.info("Check action");
+
+								System.out.println("mu action : " + mu.getCollaborationInfo().getAction());
+								log.info("mu action : " + mu.getCollaborationInfo().getAction());
+								System.out.println("pmbi action : " + pmBI.getAction());
+								log.info("pmbi action : " + pmBI.getAction());
                 final int i = Utils.compareStrings(mu.getCollaborationInfo().getAction(), pmBI.getAction());
-                if (i == 0)
+
+								System.out.println("compare_i : " + i);
+								log.info("compare_i : " + i);
+                if (i == 0) {
+									  System.out.println("Augment cValue : " + cValue + " because action matches.");
+									  log.info("Augment cValue : " + cValue + " because from action matches.");
                     cValue += MATCH_WEIGHTS.get(PARAMETERS.ACTION);
-                else if (i == -2)
+										System.out.println("cValue : " + cValue);
+										log.info("cValue : ", cValue);
+								}
+                else if (i == -2) {
+									  System.out.println("Next p mode - mis-match on action");
+									  log.info("Next p mode - mis-match on action");
                     continue; // mis-match on action
-            }
+								}
+            } else {
+								System.out.println("pmBI was null");
+								log.info("pmBI was null");
+						}
 
             /*
              * Check MPC, first check the MPC defined in the User Message flow, and if there is none there, check
@@ -272,29 +475,80 @@ public class PModeFinder {
              * both message and P-Mode)
              */            
             String mpc = mu.getMPC();
-            if (Utils.isNullOrEmpty(mpc))
+						System.out.println("check mpc");
+						log.info("check mpc");
+
+						System.out.println("mu mpc : " + mpc);
+						log.info("mu mpc : " + mpc);
+
+            if (Utils.isNullOrEmpty(mpc)) {
+							  System.out.println("mu mpc was null or empty use default mpc");
+							  log.info("mu mpc was null or empty use default mpc");
                 mpc = EbMSConstants.DEFAULT_MPC;
+						} else {
+							  System.out.println("mu mpc is null or empty");
+							  log.info("mu mpc is null or empty");
+						}
+
+						if ( pmBI == null ) {
+							  System.out.println("pmBI was null");
+							  log.info("pmBI was null");
+						} else {
+							  System.out.println("pmbi mpc : " + pmBI.getMpc());
+							  log.info("pmbi mpc : " + pmBI.getMpc());
+						}
             String mpcPMode = pmBI != null ? pmBI.getMpc() : null;
             
             if (Utils.isNullOrEmpty(mpcPMode) && !Utils.isNullOrEmpty(leg.getPullRequestFlows())) {
+							System.out.println("mpcPmode null or empty and leg pull request flow is not null or empty");
+							log.info("mpcPmode null or empty and leg pull request flow is not null or empty");
             	mpcPMode = leg.getPullRequestFlows().iterator().next().getMPC();        
-                if (Utils.isNullOrEmpty(mpcPMode))
+                if (Utils.isNullOrEmpty(mpcPMode)){
+									  System.out.println("p mode mpc is null or empty. Use default mpc.");
+									  log.info("p mode mpc is null or empty. Use default mpc.");
                     mpcPMode = EbMSConstants.DEFAULT_MPC;
+								}
+								System.out.println("mpc p mode : " + mpcPMode);
+								log.info("mpc p mode : " + mpcPMode);
                 // Now compare MPC, but take into account that MPC in a PullRequestFlow can be a sub MPC, so the one
                 // from the message can be a parent MPC
-                if (mpcPMode.startsWith(mpc))
+                if (mpcPMode.startsWith(mpc)) {
+									  System.out.println("Augment cValue : " + cValue + " because mpc matches.");
+									  log.info("Augment cValue : " + cValue + " because from mpc matches.");
                     cValue += MATCH_WEIGHTS.get(PARAMETERS.MPC);
-                else
+										System.out.println("cValue : " + cValue);
+										log.info("cValue : ", cValue);
+								}
+                else {
+									  System.out.println("Next p mode - mis-match on mpc");
+									  log.info("Next p mode - mis-match on mpc");
                     continue; // mis-match on MPC
+								}
             } else {
+							  System.out.println("not : mpcPmode null or empty and leg pull request flow is not null or empty");
+							  log.info("not : mpcPmode null or empty and leg pull request flow is not null or empty");
                 // If no MPC is given in P-Mode, it uses the default
-                if (Utils.isNullOrEmpty(mpcPMode))
+                if (Utils.isNullOrEmpty(mpcPMode)) {
+									  System.out.println("mpcPMode is null or empty. Use default mpc for p mode");
+									  log.info("mpcPMode is null or empty. Use default mpc for p mode");
                     mpcPMode = EbMSConstants.DEFAULT_MPC;
+								}
+
+								System.out.println("p mode mpc : " + mpcPMode);
+								log.info("p mode mpc : " + mpcPMode);
                 // Now compare the MPC values
-                if (mpc.equals(mpcPMode))
+                if (mpc.equals(mpcPMode)) {
+									  System.out.println("Augment cValue : " + cValue + " because mpc matches 2.");
+									  log.info("Augment cValue : " + cValue + " because from mpc matches 2.");
                     cValue += MATCH_WEIGHTS.get(PARAMETERS.MPC);
-                else
+										System.out.println("cValue : " + cValue);
+										log.info("cValue : ", cValue);
+								}
+                else {
+									  System.out.println("Next p mode - mis-match on MPC");
+									  log.info("Next p mode - mis-match on MPC");
                     continue; // mis-match on MPC
+								}
             }
             
             /*
@@ -302,34 +556,84 @@ public class PModeFinder {
              * when a property exists in the message, but is not defined in the P-Mode, it is ignored. Properties 
              * defined in the P-Mode, but not available in the message result in a mismatch.    
              */
+						System.out.println("Check properties");
+						log.info("Check properties");
             Collection<IProperty> pModeProperties = pmBI != null ? pmBI.getProperties() : null;
             if (!Utils.isNullOrEmpty(pModeProperties)) { 
             	Collection<IProperty> messageProperties = mu.getMessageProperties();
-            	if (Utils.isNullOrEmpty(messageProperties)) 
+            	if (Utils.isNullOrEmpty(messageProperties)){ 
+								System.out.println("Next p mode - mis-match because properties defined in P-Mode are missing");
+								log.info("Next p mode - mis-match because properties defined in P-Mode are missing");
             		continue; // mismatch because properties defined in P-Mode are missing
+							} else {
+								System.out.println("messageProperties is not null or empty");
+								log.info("messageProperties is not null or empty");
+							}
             	boolean propMisMatch = false;
             	for(IProperty pp : pModeProperties) {
-            		if (messageProperties.stream().anyMatch(mp -> CompareUtils.areEqual(mp, pp))) 
+								System.out.println("compare properties for p mode property : ((" + pp.getName() + " :: " + pp.getType() + " :: " + pp.getValue() + "))");
+								log.info("compare properties for p mode property : ((" + pp.getName() + " :: " + pp.getType() + " :: " + pp.getValue() + "))");
+            		if (messageProperties.stream().anyMatch(mp -> CompareUtils.areEqual(mp, pp))) {
+									System.out.println("Augment cValue : " + cValue + " because msg property matches.");
+									log.info("Augment cValue : " + cValue + " because msg property matches.");
             			cValue += MATCH_WEIGHTS.get(PARAMETERS.MSG_PROPERTY);
-            		else
+									System.out.println("cValue : " + cValue);
+									log.info("cValue : ", cValue);
+								}
+            		else {
+									System.out.println("Set propMisMatch true");
+									log.info("Set propMisMatch true");
             			propMisMatch = true;
+								}
             	}
-            	if (propMisMatch)
+            	if (propMisMatch) {
+								System.out.println("Next p mode - mismatch on a property");
+								log.info("Next p mode - mismatch on a property");
             		continue; // mismatch on a property
-            }
+							}
+            } else {
+							  System.out.println("pModeProperties are null or empty");
+							  log.info("pModeProperties are null or empty");
+						}
             
             // Does this P-Mode better match to the message meta data than the current highest match?
+						System.out.println("Compare current score with high score.");
+						log.info("Compare current score with high score.");
+
+            System.out.println("Check if this p mode is the best match.");
+            log.info("Check if this p mode is the best match.");
+            System.out.println("hValue : " + hValue);
+            log.info("hValue : ", hValue);
+            System.out.println("cValue : " + cValue);
+            log.info("cValue : ", cValue);
+
             if (cValue > hValue) {
                 // Yes, it does, set it as new best match
+							  System.out.println("Set this p mode as new best match.");
+							  log.info("Set this p mode as new best match.");
                 hValue = cValue;
                 hPMode = p;
                 multiple = false;
-            } else if (cValue == hValue)
+            } else if (cValue == hValue) {
+							  System.out.println("This p mode maches equally well as the current high score");
+							  log.info("This p mode maches equally well as the current high score");
                 // It has the same match as the current highest scoring one
                 multiple = true;
+						}
         }
 
         // Only return a single P-Mode
+        System.out.println("multiple : " + multiple);
+        log.info("multiple : ", multiple);
+
+        if ( hPMode == null ) {
+            System.out.println("hPMode is null.");
+            log.info("hPMode is null.");
+        } else {
+            System.out.println("hPMode : " + hPMode.getId());
+            log.info("hPMode : ", hPMode.getId());
+        }
+
         return !multiple ? hPMode : null;
     }
 
